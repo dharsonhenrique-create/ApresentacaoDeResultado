@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Financeiro com Análise de DRE por IA</title>
+    
+    <!-- Tailwind CSS para estilização -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js para gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js Datalabels Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <!-- PDF.js para ler ficheiros PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- Tesseract.js para OCR -->
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+        #loader {
+            border: 5px solid #374151;
+            border-radius: 50%;
+            border-top: 5px solid #3b82f6;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        .small-loader {
+            border: 3px solid #374151;
+            border-top: 3px solid #3b82f6;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .chart-container {
+            height: 400px;
+        }
+        .prose h4 {
+            margin-top: 1.25em;
+            margin-bottom: 0.5em;
+        }
+        .prose pre {
+             background-color: #111827;
+             padding: 1rem;
+             border-radius: 0.5rem;
+             font-size: 0.875rem;
+             line-height: 1.25rem;
+             overflow-x: auto;
+             color: #d1d5db;
+        }
+        input:invalid {
+            border-color: #ef4444;
+        }
+        /* Custom styles for month filter buttons */
+        .month-checkbox:checked + label {
+            background-color: #3b82f6;
+            border-color: #3b82f6;
+            color: #fff;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 antialiased">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+        
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl md:text-4xl font-bold text-white">📊 Análise de DRE com Inteligência Artificial 🧠</h1>
+            <p class="text-gray-400 mt-2">Obtenha insights e projeções a partir do seu Demonstrativo de Resultados.</p>
+        </header>
+        
+        <section id="pricing-analysis-section" class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 mb-8">
+            <h2 class="text-2xl font-bold mb-6 text-white border-b border-gray-700 pb-4">⚙️ Parâmetros de Análise</h2>
+            
+            <div id="pricing-inputs" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+                <div>
+                    <label for="purchase-price" class="text-sm font-medium text-gray-400">Preço Compra Matéria-Prima (R$/KG)</label>
+                    <input type="number" id="purchase-price" step="0.01" class="mt-1 w-full bg-gray-700 border border-gray-600 text-white rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none" value="14.50" required>
+                </div>
+                
+                <div class="flex flex-col">
+                    <label for="variable-cost" class="text-sm font-medium text-gray-400">Outros Custos Variáveis</label>
+                    <div class="flex items-center mt-1">
+                        <input type="number" id="variable-cost" step="0.01" class="w-full bg-gray-700 border border-gray-600 text-white rounded-l-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none" value="0.00" required>
+                        <select id="variable-cost-mode" class="bg-gray-600 border-l-0 border border-gray-600 text-white rounded-r-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="perkg">R$/kg</option>
+                            <option value="total">Total R$</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex flex-col">
+                    <label class="text-sm font-medium text-gray-400">Fonte dos Custos Fixos</label>
+                    <div class="flex items-center mt-1">
+                        <select id="fixed-cost-mode" class="w-full bg-gray-600 border border-gray-600 text-white rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="dre">Usar DRE</option>
+                            <option value="manual">Informar Manualmente</option>
+                        </select>
+                        <input type="number" id="fixed-cost-manual" step="0.01" class="hidden ml-2 w-full bg-gray-700 border border-gray-600 text-white rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Valor Fixo Mensal (R$)">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex flex-wrap justify-between items-center mb-4 border-b border-gray-700 pb-4 gap-4">
+                <h3 class="text-xl font-semibold text-white">📦 Mix de Produtos de Venda</h3>
+                <div class="flex flex-wrap gap-2 items-center">
+                    <button id="format-prices-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300">Formatar Preços</button>
+                    <button id="normalize-btn" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300">Normalizar %</button>
+                    <button id="add-material-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors duration-300">Adicionar</button>
+                </div>
+            </div>
+            <div id="mix-warning" class="hidden my-2 p-2 text-center text-yellow-300 bg-yellow-900/50 rounded-lg"></div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="text-sm text-gray-300 uppercase">
+                        <tr>
+                            <th class="p-2">Tipo de Material</th>
+                            <th class="p-2">Porcentagem (%)</th>
+                            <th class="p-2">Preço de Venda (R$/KG)</th>
+                            <th class="p-2 text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="materials-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="upload-section" class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 mb-8 max-w-3xl mx-auto">
+            <h2 class="text-xl font-semibold mb-4 text-white">🚀 Upload e Análise Final</h2>
+            <div class="space-y-4">
+                 <div>
+                      <label for="gemini-api-key" class="block text-sm font-medium text-gray-400 mb-1 text-left">Chave da API do Gemini</label>
+                      <input type="password" id="gemini-api-key" placeholder="Insira a sua chave da API aqui" class="w-full bg-gray-700 border border-gray-600 text-white rounded-lg p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none" value="AIzaSyAbHxgCDpTSGvtfn3H3zNqALhsGU9ggawA" required>
+                 </div>
+                 <div>
+                      <label for="pdf-upload" class="block text-sm font-medium text-gray-400 mb-1 text-left">Ficheiro DRE (PDF)</label>
+                      <input type="file" id="pdf-upload" accept="application/pdf" class="block w-full text-sm text-gray-200 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-600 file:text-gray-200 hover:file:bg-gray-500" required>
+                 </div>
+                 <div id="month-filter-section" class="hidden">
+                    <label class="text-sm font-medium text-gray-400">Selecione os Meses para Análise</label>
+                    <div id="month-filter-container" class="mt-2 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                        <!-- Month filter buttons will be dynamically inserted here -->
+                    </div>
+                </div>
+            </div>
+            <button id="analyze-button" class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors duration-300 flex items-center justify-center gap-2" disabled>
+                <span>Analisar com IA</span>
+            </button>
+            <div id="loader-container" class="mt-6 hidden flex-col items-center">
+                <div id="loader"></div>
+                <p id="loader-text" class="text-blue-400 mt-2">Processando PDF...</p>
+            </div>
+             <div id="error-message" class="mt-4 text-red-400 bg-red-900/50 p-3 rounded-lg hidden"></div>
+        </section>
+
+        <!-- Container para os resultados da análise -->
+        <main id="analysis-results" class="space-y-12 mt-12 hidden">
+            
+            <section id="summary-panel" class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 hidden">
+                <h2 class="text-2xl font-bold mb-6 text-white border-b border-gray-700 pb-4">📈 Resumo dos Dados Extraídos (Período Selecionado)</h2>
+                <div id="summary-content" class="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+                </div>
+            </section>
+            
+            <section id="monthly-summary-panel" class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 hidden">
+                <h2 class="text-2xl font-bold mb-6 text-white border-b border-gray-700 pb-4">🗓️ Resumo Mensal dos Dados Extraídos</h2>
+                <div id="monthly-summary-content" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                </div>
+            </section>
+
+            <section class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+                <h2 class="text-2xl font-bold mb-6 text-white border-b border-gray-700 pb-4">💡 Sumário Executivo e Análise de Variações (IA)</h2>
+                <div id="general-analysis-content" class="prose prose-invert max-w-none"></div>
+            </section>
+            
+            <section id="pricing-results-section" class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 hidden">
+                <h2 class="text-2xl font-bold mb-6 text-white border-b border-gray-700 pb-4">🎯 Análise de Simulação: Realizado (DRE) vs. Simulado (Mix)</h2>
+                <div id="simulator-analysis-content" class="prose prose-invert max-w-none mb-8"></div>
+                <div class="grid lg:grid-cols-2 gap-8 mb-8">
+                    <div class="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
+                        <h3 class="text-lg font-bold mb-4 text-center text-white">Receita: Realizada vs. Simulada</h3>
+                        <div class="chart-container h-72"><canvas id="revenueSimulatorChart"></canvas></div>
+                        <p class="text-xs text-gray-400 mt-2 text-center">Compara a receita do DRE com a receita projetada pelo seu mix de produtos, incluindo o Ponto de Equilíbrio (PE) como meta.</p>
+                    </div>
+                    <div class="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
+                        <h3 class="text-lg font-bold mb-4 text-center text-white">Margem de Contribuição: Realizada vs. Simulada</h3>
+                        <div class="chart-container h-72"><canvas id="marginSimulatorChart"></canvas></div>
+                         <p class="text-xs text-gray-400 mt-2 text-center">Compara a Margem de Contribuição (MC) do DRE com a MC projetada pelo seu mix. <br>Fórmula: MC = Receita - Custos Variáveis.</p>
+                    </div>
+                </div>
+                <div class="overflow-x-auto bg-gray-900/50 rounded-xl border border-gray-700">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-700 text-sm text-gray-300 uppercase">
+                            <tr>
+                                <th class="p-4">Mês</th>
+                                <th class="p-4 text-right">Receita Real (DRE)</th>
+                                <th class="p-4 text-right">Receita Simulada (Mix)</th>
+                                <th class="p-4 text-right">Diferença</th>
+                                <th class="p-4 text-right">PE (R$)</th>
+                                <th class="p-4 text-right">PE (KG)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-body" class="divide-y divide-gray-700"></tbody>
+                    </table>
+                </div>
+            </section>
+            
+            <section id="breakeven-projection-section" class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700 hidden">
+                <h2 class="text-2xl font-bold mb-6 text-white border-b border-gray-700 pb-4">📍 Análise e Projeção do Ponto de Equilíbrio (Base DRE)</h2>
+                <div class="grid lg:grid-cols-2 gap-8">
+                    <div>
+                        <div class="chart-container"><canvas id="breakEvenProjectionChart"></canvas></div>
+                        <p class="text-xs text-gray-400 mt-2 text-center">Compara a receita real com o Ponto de Equilíbrio (PE) calculado com dados do DRE e projeta uma meta de PE para os próximos 6 meses com base na média do período analisado.</p>
+                    </div>
+                    <div class="overflow-x-auto bg-gray-900/50 rounded-xl border border-gray-700">
+                        <table class="w-full text-left">
+                            <thead class="bg-gray-700 text-sm text-gray-300 uppercase">
+                                <tr>
+                                    <th class="p-3">Mês</th>
+                                    <th class="p-3 text-right">MC (DRE)</th>
+                                    <th class="p-3 text-right">MC % (DRE)</th>
+                                    <th class="p-3 text-right">PE (R$) (DRE)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="breakEvenProjectionTable" class="divide-y divide-gray-700"></tbody>
+                        </table>
+                         <p class="text-xs text-gray-400 mt-2 text-center p-2">Esta tabela mostra os componentes usados para calcular o Ponto de Equilíbrio (PE) de cada mês, usando apenas os dados extraídos do DRE.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="grid lg:grid-cols-2 gap-8">
+                <div class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+                    <h3 class="text-xl font-bold mb-4 text-center text-white">Margem Operacional vs. Margem Líquida</h3>
+                    <div class="chart-container"><canvas id="operationalNetMarginChart"></canvas></div>
+                    <p class="text-xs text-gray-400 mt-2 text-center">Compara a rentabilidade da operação (Margem Operacional) com a rentabilidade final (Margem Líquida).<br>Fórmula: Margem = (Resultado / Receita Líquida) * 100.</p>
+                </div>
+                <div class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+                    <h3 class="text-xl font-bold mb-4 text-center text-white">Qualidade do Resultado</h3>
+                    <div class="chart-container"><canvas id="resultQualityChart"></canvas></div>
+                    <p class="text-xs text-gray-400 mt-2 text-center">Mostra a composição do resultado, separando o que veio da atividade principal (Operacional) e de eventos não recorrentes (Não Operacional).</p>
+                </div>
+                <div class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+                    <h3 class="text-xl font-bold mb-4 text-center text-white">Análise Vertical (% da Receita Líquida)</h3>
+                    <div class="chart-container"><canvas id="verticalAnalysisChart"></canvas></div>
+                    <p class="text-xs text-gray-400 mt-2 text-center">Demonstra o peso percentual dos custos e do lucro em relação à Receita Líquida, ajudando a entender a estrutura de custos.</p>
+                </div>
+                <div class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+                    <h3 class="text-xl font-bold mb-4 text-center text-white">Análise Horizontal (Variação Mensal %)</h3>
+                    <div class="chart-container"><canvas id="horizontalAnalysisChart"></canvas></div>
+                    <p class="text-xs text-gray-400 mt-2 text-center">Exibe a variação percentual da receita e do lucro de um mês para o outro, destacando tendências de crescimento ou queda.</p>
+                </div>
+            </section>
+
+            <section class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+                 <h2 class="text-2xl font-bold mb-6 text-white border-b border-gray-700 pb-4">⚠️ Recomendações e Inconsistências (IA)</h2>
+                <div class="grid md:grid-cols-2 gap-8 items-start">
+                    <div id="critical-points-content" class="bg-gray-900/50 p-6 rounded-xl border border-red-500/30 prose prose-invert max-w-none"></div>
+                    <div class="bg-gray-800 p-6 rounded-2xl grid grid-rows-2 gap-8">
+                        <div>
+                            <h3 class="text-xl font-bold mb-4 text-center">Composição Média dos Custos Variáveis</h3>
+                            <div class="chart-container h-48"><canvas id="costsCompositionChart"></canvas></div>
+                             <p class="text-xs text-gray-400 mt-2 text-center">Divide o total dos custos que variam com a produção, mostrando o peso da Matéria-Prima em relação aos outros custos.</p>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-bold mb-4 text-center">Composição Média dos Custos Fixos</h3>
+                            <div class="chart-container h-48"><canvas id="fixedCostsCompositionChart"></canvas></div>
+                             <p class="text-xs text-gray-400 mt-2 text-center">Mostra como os custos fixos totais são distribuídos entre Pessoal, Ocupação e Serviços de Terceiros.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <section class="bg-gray-800 p-6 rounded-xl shadow-lg border border-gray-700">
+                <h2 class="text-2xl font-bold mb-6 text-white border-b border-gray-700 pb-4">📋 Dados Extraídos (IA)</h2>
+                <p class="text-gray-400 mb-4">Esta seção mostra os dados brutos extraídos pela IA do seu DRE em formato de tabela (CSV). Estes são os números que alimentam todos os gráficos e análises do dashboard.</p>
+                <div id="csv-data-content" class="space-y-6 prose prose-invert max-w-none"></div>
+            </section>
+
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Register Chart.js plugins
+            Chart.register(ChartDataLabels);
+
+            const { pdfjsLib } = globalThis;
+            if (pdfjsLib) {
+               pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+            }
+            
+            const apiKeyInput = document.getElementById('gemini-api-key');
+            const fileInput = document.getElementById('pdf-upload');
+            const analyzeButton = document.getElementById('analyze-button');
+            const loader = document.getElementById('loader-container');
+            const loaderText = document.getElementById('loader-text');
+            const resultsContainer = document.getElementById('analysis-results');
+            const errorMessageDiv = document.getElementById('error-message');
+            let chartInstances = {};
+            
+            const addMaterialBtn = document.getElementById('add-material-btn');
+            const materialsBody = document.getElementById('materials-body');
+            const normalizeBtn = document.getElementById('normalize-btn');
+            const mixWarningDiv = document.getElementById('mix-warning');
+            const formatPricesBtn = document.getElementById('format-prices-btn');
+            const monthFilterContainer = document.getElementById('month-filter-container');
+            const monthFilterSection = document.getElementById('month-filter-section');
+
+            const purchasePriceInput = document.getElementById('purchase-price');
+            const variableCostInput = document.getElementById('variable-cost');
+            const variableCostModeSelect = document.getElementById('variable-cost-mode');
+            const fixedCostModeSelect = document.getElementById('fixed-cost-mode');
+            const fixedCostManualInput = document.getElementById('fixed-cost-manual');
+            
+            let fullExtractedData = null;
+            let fullPdfText = null;
+
+            const showError = (message) => {
+                errorMessageDiv.textContent = message;
+                errorMessageDiv.classList.remove('hidden');
+                loader.classList.add('hidden');
+            };
+
+            const clearCharts = () => {
+                Object.values(chartInstances).forEach(chart => chart.destroy());
+                chartInstances = {};
+            };
+            
+            const showAIPlaceholders = () => {
+                const placeholderHTML = `
+                    <div class="flex items-center justify-center p-8">
+                        <div class="flex flex-col items-center">
+                            <div class="w-8 h-8 rounded-full animate-spin small-loader"></div>
+                            <p class="text-blue-400 mt-3">Analisando com IA... Isso pode levar um momento.</p>
+                        </div>
+                    </div>`;
+                document.getElementById('general-analysis-content').innerHTML = placeholderHTML;
+                document.getElementById('critical-points-content').innerHTML = placeholderHTML;
+                document.getElementById('csv-data-content').innerHTML = placeholderHTML;
+                document.getElementById('simulator-analysis-content').innerHTML = placeholderHTML;
+            };
+            
+            const showErrorInAISections = (message) => {
+                const errorHTML = `<div class="text-red-400 bg-red-900/50 p-4 rounded-lg">${message}</div>`;
+                document.getElementById('general-analysis-content').innerHTML = errorHTML;
+                document.getElementById('critical-points-content').innerHTML = errorHTML;
+                document.getElementById('csv-data-content').innerHTML = errorHTML;
+                document.getElementById('simulator-analysis-content').innerHTML = errorHTML;
+            };
+
+            const getPricingParams = () => {
+                const purchasePriceKg = parseFloat(purchasePriceInput.value);
+                const otherVarCostValue = parseFloat(variableCostInput.value);
+                const fixedCostMode = fixedCostModeSelect.value;
+                const fixedCostValue = parseFloat(fixedCostManualInput.value);
+
+                const mixItems = [];
+                const materialRows = materialsBody.querySelectorAll('tr');
+                let totalPercentage = 0;
+                materialRows.forEach(row => {
+                    const percentage = parseFloat(row.querySelector('.material-percentage').value) || 0;
+                    totalPercentage += percentage;
+                    mixItems.push({
+                        name: row.querySelector('.material-name').value,
+                        percentage: percentage,
+                        sellPrice: parseFloat(row.querySelector('.material-sell-price').value) || 0,
+                    });
+                });
+
+                if (isNaN(purchasePriceKg) || purchasePriceKg <= 0) throw new Error("Preço da matéria-prima é obrigatório e deve ser positivo.");
+                if (isNaN(otherVarCostValue) || otherVarCostValue < 0) throw new Error("Outros custos variáveis são obrigatórios.");
+                if (fixedCostMode === 'manual' && (isNaN(fixedCostValue) || fixedCostValue < 0)) throw new Error("Custo fixo manual é obrigatório e não pode ser negativo.");
+                if (mixItems.length === 0) throw new Error("Adicione pelo menos um item ao mix de produtos.");
+                if (totalPercentage === 0) throw new Error("A soma das porcentagens do mix não pode ser zero.");
+                if (!mixItems.some(item => item.sellPrice > 0 && item.percentage > 0)) throw new Error("Pelo menos um item do mix deve ter preço de venda e porcentagem maiores que zero.");
+
+                return {
+                    purchasePriceKg,
+                    otherVarCostMode: variableCostModeSelect.value,
+                    otherVarCostValue,
+                    fixedCostMode,
+                    fixedCostValue: fixedCostMode === 'manual' ? fixedCostValue : null,
+                    mixItems
+                };
+            };
+            
+            const handleAnalysis = async () => {
+                let pricingParams;
+                try {
+                    pricingParams = getPricingParams();
+                    
+                    const apiKey = apiKeyInput.value;
+                    const file = fileInput.files[0];
+
+                    if (!apiKey) { showError('Por favor, insira a sua chave da API do Gemini.'); return; }
+                    if (!file) { showError('Por favor, selecione um ficheiro PDF.'); return; }
+
+                    loader.classList.remove('hidden');
+                    resultsContainer.classList.add('hidden');
+                    errorMessageDiv.classList.add('hidden');
+                    clearCharts();
+                    
+                    const filteredData = filterDataBySelectedMonths(fullExtractedData);
+                    if (filteredData.labels.length === 0) {
+                        showError("Por favor, selecione pelo menos um mês para análise.");
+                        return;
+                    }
+                    
+                    await runAnalysisWithCurrentFilters(pricingParams, apiKey, filteredData);
+
+                } catch (error) {
+                    console.error('Erro de validação:', error);
+                    showError(error.message);
+                }
+            };
+            
+            const runAnalysisWithCurrentFilters = async (pricingParams, apiKey, dataForAI) => {
+                if (!fullExtractedData) return;
+
+                loader.classList.remove('hidden');
+                loaderText.textContent = 'Filtrando dados e recalculando...';
+
+                const filteredData = filterDataBySelectedMonths(fullExtractedData);
+
+                renderSummaryPanel(filteredData);
+                renderMonthlySummaryPanel(filteredData);
+                
+                const pricingResultsByMonth = calculateInferredProductionAndMargins(filteredData, pricingParams);
+                
+                renderChartsAndProjections(filteredData, pricingResultsByMonth);
+                renderPricingResultsTable(pricingResultsByMonth, filteredData.labels, filteredData);
+                document.getElementById('pricing-results-section').classList.remove('hidden');
+                
+                renderBreakEvenProjection(filteredData);
+                document.getElementById('breakeven-projection-section').classList.remove('hidden');
+
+                resultsContainer.classList.remove('hidden');
+                loader.classList.add('hidden');
+
+                if (apiKey !== null && dataForAI) {
+                    showAIPlaceholders();
+                    try {
+                        loaderText.textContent = 'Gerando análise aprofundada...';
+                        const aiAnalysis = await callAIFinancialAnalyst(dataForAI, apiKey, pricingParams); 
+                        renderGeminiAnalysis(aiAnalysis);
+                    } catch (aiError) {
+                        console.error('Erro na análise da IA:', aiError);
+                        showErrorInAISections(aiError.message || 'Ocorreu um erro ao obter a análise da IA.');
+                    }
+                }
+            };
+
+            const filterDataBySelectedMonths = (data) => {
+                const selectedMonths = Array.from(monthFilterContainer.querySelectorAll('input:checked')).map(cb => cb.value);
+                
+                if (selectedMonths.length === 0) {
+                    const emptyData = { labels: [], datasets: {} };
+                    for (const key in data.datasets) {
+                        emptyData.datasets[key] = [];
+                    }
+                    return emptyData;
+                }
+
+                const filteredIndices = selectedMonths.map(month => data.labels.indexOf(month)).filter(index => index !== -1);
+
+                const filteredData = {
+                    labels: filteredIndices.map(index => data.labels[index]),
+                    datasets: {}
+                };
+
+                for (const key in data.datasets) {
+                    if (Array.isArray(data.datasets[key])) {
+                        filteredData.datasets[key] = filteredIndices.map(index => data.datasets[key][index]);
+                    }
+                }
+                return filteredData;
+            };
+
+            const calculateInferredProductionAndMargins = (dreData, pricingParams) => {
+                const results = [];
+                dreData.labels.forEach((month, i) => {
+                    const cvTotalMes = dreData.datasets.variableCosts[i];
+                    if (cvTotalMes === null || cvTotalMes <= 0) {
+                        results.push(null);
+                        return;
+                    }
+
+                    let cvuBase = pricingParams.purchasePriceKg + (pricingParams.otherVarCostMode === 'perkg' ? pricingParams.otherVarCostValue : 0);
+                    let producaoEstimadaKg = cvuBase > 0 ? cvTotalMes / cvuBase : 0;
+
+                    if (pricingParams.otherVarCostMode === 'total' && producaoEstimadaKg > 0) {
+                        cvuBase = pricingParams.purchasePriceKg + (pricingParams.otherVarCostValue / producaoEstimadaKg);
+                        producaoEstimadaKg = cvuBase > 0 ? cvTotalMes / cvuBase : 0;
+                    }
+                    
+                    let receitaMixTotal = 0;
+                    pricingParams.mixItems.forEach(item => {
+                        const qtyItem = producaoEstimadaKg * (item.percentage / 100);
+                        receitaMixTotal += qtyItem * item.sellPrice;
+                    });
+                    
+                    const mcMixTotal = receitaMixTotal - cvTotalMes;
+                    const mcMixPercent = receitaMixTotal > 0 ? mcMixTotal / receitaMixTotal : 0;
+
+                    const fixedCost = pricingParams.fixedCostMode === 'dre' ? dreData.datasets.fixedCosts[i] : pricingParams.fixedCostValue;
+                    
+                    const pe_rs = mcMixPercent > 0 ? fixedCost / mcMixPercent : null;
+                    
+                    const precoVendaMedioMix = pricingParams.mixItems.reduce((sum, item) => sum + (item.sellPrice * (item.percentage / 100)), 0);
+                    const mcPorKg = precoVendaMedioMix - cvuBase;
+                    const pe_kg = mcPorKg > 0 ? fixedCost / mcPorKg : null;
+
+                    results.push({
+                        producaoEstimadaKg,
+                        cvuBase,
+                        receitaMixTotal,
+                        mcMixTotal,
+                        mcMixPercent,
+                        pe_rs,
+                        pe_kg
+                    });
+                });
+                return results;
+            };
+
+            const callApi = async (apiKey, prompt, isJson = false) => {
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                 const requestBody = {
+                    contents: [{ parts: [{ text: prompt }] }],
+                    safetySettings: [
+                        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                    ]
+                };
+
+                if (isJson) {
+                    requestBody.generationConfig = { responseMimeType: "application/json" };
+                }
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestBody)
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(`Erro na API do Gemini: ${errorData.error.message}`);
+                    }
+                    const data = await response.json();
+                    
+                    if (data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts.length > 0) {
+                        return data.candidates[0].content.parts[0].text;
+                    } else {
+                        console.error("Resposta da API inválida:", data);
+                        throw new Error("A resposta da API do Gemini não continha o conteúdo esperado.");
+                    }
+                } catch (error) {
+                     console.error("Erro ao chamar a API do Gemini:", error);
+                     throw new Error("Falha na comunicação com a API do Gemini. Verifique a sua chave e tente novamente.");
+                }
+            }
+
+            const getStructuredDataFromAI = async (dreText, apiKey) => {
+                const prompt = `
+                    Analise o seguinte texto de um DRE (Demonstrativo de Resultado do Exercício) e extraia os dados em um formato JSON.
+                    O JSON deve ter a seguinte estrutura:
+                    {
+                      "labels": ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"],
+                      "datasets": {
+                        "netRevenue": [valor1, valor2, ...],
+                        "variableCosts": [valor1, valor2, ...],
+                        "contributionMargin": [valor1, valor2, ...],
+                        "fixedCosts": [valor1, valor2, ...],
+                        "operationalResult": [valor1, valor2, ...],
+                        "nonOperationalResult": [valor1, valor2, ...],
+                        "netProfit": [valor1, valor2, ...],
+                        "rawMaterial": [valor1, valor2, ...],
+                        "personnelCosts": [valor1, valor2, ...],
+                        "occupationCosts": [valor1, valor2, ...],
+                        "servicesCosts": [valor1, valor2, ...]
+                      }
+                    }
+
+                    - O array "labels" DEVE conter todos os 12 meses do ano, na ordem.
+                    - Cada array de valor em "datasets" deve ter 12 elementos, um para cada mês.
+                    - **Atenção:** O texto do DRE pode não ter dados para todos os meses. Se uma coluna de mês estiver faltando no texto, ou se uma linha de dados começar com vírgulas (ex: ',,73.328,84'), isso indica que os primeiros meses não têm dados. Preencha os valores para esses meses como 'null'. Por exemplo, no texto fornecido, a maioria dos dados começa em Fevereiro, então o valor para Janeiro deve ser 'null'.
+                    - Para "variableCosts", use a linha que começa com "(-) Custos Variáveis".
+                    - Some os valores de "Matéria Prima Zamack 05" e "Matéria Prima Zamack Jóia" para obter o valor de "rawMaterial".
+                    - Some os valores de "Gastos com Pessoal", "Gastos com Ocupação" e "Gastos com Serviços de Terceiros" para obter o valor de "fixedCosts".
+                    - Retorne APENAS o JSON, sem nenhum texto ou formatação adicional.
+
+                    Texto do DRE:
+                    ---
+                    ${dreText}
+                    ---
+                `;
+                
+                const jsonResponse = await callApi(apiKey, prompt, true);
+                try {
+                    return JSON.parse(jsonResponse);
+                } catch (e) {
+                    console.error("Erro ao parsear JSON da IA:", e, "Resposta recebida:", jsonResponse);
+                    throw new Error("A IA retornou um formato de dados inválido.");
+                }
+            };
+
+            const callAIFinancialAnalyst = async (filteredData, apiKey, pricingParams) => {
+                 const prompt = `
+                    Você é um analista financeiro sênior. Sua tarefa é analisar os dados financeiros de um período selecionado e os parâmetros de mix de produtos fornecidos por um usuário.
+                    Com base nos dados, gere uma análise completa em formato JSON. A resposta DEVE ser um único objeto JSON com a seguinte estrutura:
+                    {
+                      "summary": "Um resumo executivo em markdown sobre a saúde financeira, destacando tendências de receita, custos e lucratividade para o período selecionado.",
+                      "recommendations": "Uma lista em markdown com pontos críticos, inconsistências e recomendações práticas para melhorar os resultados.",
+                      "csvData": "Uma tabela em formato CSV contendo os dados chave do DRE (Receita Líquida, Custos Variáveis, Custos Fixos, Lucro Líquido) com os meses nas linhas.",
+                      "simulatorAnalysis": "Uma análise em markdown sobre a simulação. Compare a receita e margem de contribuição 'Realizada' (do DRE) com a 'Simulada' (do mix). Se a simulação for melhor, sugira que os preços de venda podem estar baixos ou o mix de vendas real é menos rentável. Se o realizado for melhor, elogie a performance de vendas."
+                    }
+
+                    Instruções importantes:
+                    1.  **Use os dados do Mix de Produtos:** Compare as projeções baseadas no mix de produtos do usuário com os dados reais do DRE. Destaque qualquer divergência significativa na margem de contribuição.
+                    2.  **Seja Claro e Direto:** Use uma linguagem de negócios acessível.
+                    3.  **Formato Markdown:** Para "summary", "recommendations" e "simulatorAnalysis", use markdown para formatar o texto (e.g., \`* item de lista\`, \`**negrito**\`). As quebras de linha dentro das strings JSON devem ser escapadas como \\n.
+                    4.  **Formato CSV:** Para "csvData", a primeira linha deve ser o cabeçalho (Mês, Receita Líquida, etc.).
+
+                    ---
+                    Dados Financeiros para Análise (Período Selecionado):
+                    \`\`\`json
+                    ${JSON.stringify(filteredData)}
+                    \`\`\`
+                    ---
+                    Dados de precificação e mix (entrada do usuário):
+                    \`\`\`json
+                    ${JSON.stringify(pricingParams, null, 2)}
+                    \`\`\`
+                `;
+                const jsonResponse = await callApi(apiKey, prompt, true);
+                try {
+                    return JSON.parse(jsonResponse);
+                } catch (e) {
+                    console.error("Erro ao parsear JSON da Análise Financeira:", e, "Resposta recebida:", jsonResponse);
+                    throw new Error("A IA retornou um formato de análise inválido.");
+                }
+            };
+            
+            const renderGeminiAnalysis = (analysis) => {
+                const { summary, recommendations, csvData, simulatorAnalysis } = analysis;
+
+                const markdownToHtml = (md) => {
+                     return md
+                        .replace(/\n\n/g, '<br><br>') // Handle paragraph breaks
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                        .replace(/^\s*-\s*(.*)/gm, '<li class="ml-4">$1</li>')
+                        .replace(/(\<li.*\>.*<\/li\>)/gs, '<ul class="list-disc pl-5">$1</ul>');
+                };
+
+                document.getElementById('general-analysis-content').innerHTML = markdownToHtml(summary || "Nenhum sumário foi gerado.");
+                document.getElementById('critical-points-content').innerHTML = markdownToHtml(recommendations || "Nenhuma recomendação foi gerada.");
+                document.getElementById('simulator-analysis-content').innerHTML = markdownToHtml(simulatorAnalysis || "Nenhuma análise da simulação foi gerada.");
+                
+                const csvContentDiv = document.getElementById('csv-data-content');
+                if (csvData) {
+                    csvContentDiv.innerHTML = `<h4 class="text-lg font-semibold text-white">Dados Tabulares</h4><pre><code>${csvData}</code></pre>`;
+                } else {
+                    csvContentDiv.innerHTML = "<p>Nenhum dado tabular foi gerado.</p>";
+                }
+            };
+
+            const extractPdfText = async (typedarray) => {
+                const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                let textFromPdfJs = '';
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    textFromPdfJs += textContent.items.map(item => item.str).join('\n');
+                }
+
+                const hasNumbers = /-?\d{1,3}(?:\.\d{3})*,\d{2}/.test(textFromPdfJs);
+                const hasMonths = /janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro/i.test(textFromPdfJs);
+
+                if (textFromPdfJs.length > 100 && hasNumbers && hasMonths) {
+                    console.log("PDF.js text extraction successful.");
+                    return textFromPdfJs;
+                }
+
+                console.warn("PDF.js extraction failed or text is insufficient. Falling back to OCR.");
+                loaderText.textContent = 'Texto do PDF ilegível, usando OCR...';
+                
+                const worker = await Tesseract.createWorker('por');
+                let textFromOcr = '';
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: 2.0 });
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+                    const { data: { text } } = await worker.recognize(canvas);
+                    textFromOcr += text + '\n';
+                }
+                await worker.terminate();
+                console.log("OCR extraction finished.");
+                return textFromOcr;
+            };
+
+            const renderSummaryPanel = (data) => {
+                const summaryPanel = document.getElementById('summary-panel');
+                const summaryContent = document.getElementById('summary-content');
+
+                if (!data || !data.datasets) {
+                    summaryPanel.classList.add('hidden');
+                    return;
+                }
+
+                const sum = (arr) => arr ? arr.reduce((acc, val) => acc + (val || 0), 0) : 0;
+                const formatCurrency = (value) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+                const totalNetRevenue = sum(data.datasets.netRevenue);
+                const totalVariableCosts = sum(data.datasets.variableCosts);
+                const totalFixedCosts = sum(data.datasets.fixedCosts);
+                const totalNetProfit = sum(data.datasets.netProfit);
+
+                const summaryItems = [
+                    { label: 'Total Receita Líquida', value: formatCurrency(totalNetRevenue), color: 'text-green-400' },
+                    { label: 'Total Custos Variáveis', value: formatCurrency(totalVariableCosts), color: 'text-yellow-400' },
+                    { label: 'Total Custos Fixos', value: formatCurrency(totalFixedCosts), color: 'text-orange-400' },
+                    { label: 'Total Lucro Líquido', value: formatCurrency(totalNetProfit), color: totalNetProfit >= 0 ? 'text-green-400' : 'text-red-400' }
+                ];
+
+                summaryContent.innerHTML = summaryItems.map(item => `
+                    <div class="bg-gray-900/50 p-4 rounded-lg">
+                        <p class="text-sm text-gray-400">${item.label}</p>
+                        <p class="text-2xl font-bold ${item.color}">${item.value}</p>
+                    </div>
+                `).join('');
+
+                summaryPanel.classList.remove('hidden');
+            };
+            
+            const renderMonthlySummaryPanel = (data) => {
+                const monthlyPanel = document.getElementById('monthly-summary-panel');
+                const monthlyContent = document.getElementById('monthly-summary-content');
+
+                if (!data || !data.labels || data.labels.length === 0) {
+                    monthlyPanel.classList.add('hidden');
+                    return;
+                }
+                const formatCurrency = (value) => value !== null && !isNaN(value) ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'N/A';
+
+                monthlyContent.innerHTML = data.labels.map((label, i) => `
+                    <div class="flex-shrink-0 w-full bg-gray-900/50 p-4 rounded-lg">
+                        <h4 class="text-lg font-bold text-white mb-3">${label}</h4>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between"><span>Receita Líquida:</span> <span class="font-semibold text-green-400">${formatCurrency(data.datasets.netRevenue[i])}</span></div>
+                            <div class="flex justify-between"><span>Custos Variáveis:</span> <span class="font-semibold text-yellow-400">${formatCurrency(data.datasets.variableCosts[i])}</span></div>
+                            <div class="flex justify-between"><span>Custos Fixos:</span> <span class="font-semibold text-orange-400">${formatCurrency(data.datasets.fixedCosts[i])}</span></div>
+                            <div class="flex justify-between border-t border-gray-700 pt-2 mt-2"><span>Lucro Líquido:</span> <span class="font-bold ${data.datasets.netProfit[i] >= 0 ? 'text-green-400' : 'text-red-400'}">${formatCurrency(data.datasets.netProfit[i])}</span></div>
+                        </div>
+                    </div>
+                `).join('');
+                
+                monthlyPanel.classList.remove('hidden');
+            };
+
+            const renderChartsAndProjections = (data, pricingResults) => {
+                renderSimulatorCharts(data, pricingResults);
+                renderOperationalNetMarginChart(data);
+                renderResultQualityChart(data);
+                renderVerticalAnalysisChart(data);
+                renderHorizontalAnalysisChart(data);
+                renderCostsCompositionChart(data.datasets);
+                renderFixedCostsCompositionChart(data.datasets);
+            };
+            
+            const createChart = (ctx, config) => {
+                const chartId = ctx.canvas.id;
+                if (chartInstances[chartId]) chartInstances[chartId].destroy();
+                chartInstances[chartId] = new Chart(ctx, config);
+            };
+            
+            const chartDefaultOptions = {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { 
+                    legend: { position: 'top', labels: { color: '#d1d5db' } },
+                    datalabels: { display: false }
+                },
+                scales: { 
+                    y: { beginAtZero: true, ticks: { color: '#9ca3af' }, grid: { color: '#374151' } },
+                    x: { ticks: { color: '#9ca3af' }, grid: { color: '#374151' } }
+                }
+            };
+
+            const renderSimulatorCharts = (data, pricingResults) => {
+                const { labels, datasets } = data;
+                const netRevenue = datasets.netRevenue || [];
+                const contributionMargin = datasets.contributionMargin || [];
+                const simulatedRevenue = pricingResults.map(r => r ? r.receitaMixTotal : null);
+                const simulatedMargin = pricingResults.map(r => r ? r.mcMixTotal : null);
+                const breakEvenPoints = pricingResults.map(r => r ? r.pe_rs : null);
+
+                // Revenue Chart
+                const revCtx = document.getElementById('revenueSimulatorChart').getContext('2d');
+                createChart(revCtx, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: 'Receita Realizada (DRE)', data: netRevenue, backgroundColor: 'rgba(59, 130, 246, 0.7)' },
+                            { label: 'Receita Simulada (Mix)', data: simulatedRevenue, backgroundColor: 'rgba(34, 197, 94, 0.7)' },
+                            { label: 'Ponto de Equilíbrio (PE)', data: breakEvenPoints, borderColor: '#ef4444', backgroundColor: 'transparent', borderWidth: 2, type: 'line', spanGaps: true, pointRadius: 0 }
+                        ]
+                    },
+                    options: { ...chartDefaultOptions, plugins: { ...chartDefaultOptions.plugins, tooltip: { callbacks: { label: (context) => context.parsed.y !== null ? `R$ ${context.parsed.y.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'N/A' } } }, scales: { ...chartDefaultOptions.scales, y: { ...chartDefaultOptions.scales.y, ticks: { ...chartDefaultOptions.scales.y.ticks, callback: (value) => `R$ ${(value / 1000).toLocaleString('pt-BR')}k` } } } }
+                });
+
+                // Margin Chart
+                const marginCtx = document.getElementById('marginSimulatorChart').getContext('2d');
+                createChart(marginCtx, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: 'MC Realizada (DRE)', data: contributionMargin, backgroundColor: 'rgba(139, 92, 246, 0.7)' },
+                            { label: 'MC Simulada (Mix)', data: simulatedMargin, backgroundColor: 'rgba(245, 158, 11, 0.7)' }
+                        ]
+                    },
+                    options: { ...chartDefaultOptions, plugins: { ...chartDefaultOptions.plugins, tooltip: { callbacks: { label: (context) => context.parsed.y !== null ? `R$ ${context.parsed.y.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'N/A' } } }, scales: { ...chartDefaultOptions.scales, y: { ...chartDefaultOptions.scales.y, beginAtZero: false, ticks: { ...chartDefaultOptions.scales.y.ticks, callback: (value) => `R$ ${(value / 1000).toLocaleString('pt-BR')}k` } } } }
+                });
+            };
+
+            const renderOperationalNetMarginChart = (data) => {
+                const { labels, datasets } = data;
+                const netRevenue = datasets.netRevenue || [];
+                const operationalResult = datasets.operationalResult || [];
+                const netProfit = datasets.netProfit || [];
+
+                const operationalMargin = netRevenue.map((rev, i) => rev > 0 ? (operationalResult[i] / rev) * 100 : null);
+                const netMargin = netRevenue.map((rev, i) => rev > 0 ? (netProfit[i] / rev) * 100 : null);
+
+                const ctx = document.getElementById('operationalNetMarginChart').getContext('2d');
+                createChart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: 'Margem Operacional (%)', data: operationalMargin, borderColor: '#3b82f6', backgroundColor: 'transparent', tension: 0.1, spanGaps: true },
+                            { label: 'Margem Líquida (%)', data: netMargin, borderColor: '#10b981', backgroundColor: 'transparent', tension: 0.1, spanGaps: true }
+                        ]
+                    },
+                    options: {
+                        ...chartDefaultOptions,
+                        scales: { ...chartDefaultOptions.scales, y: { ...chartDefaultOptions.scales.y, beginAtZero: false, ticks: { ...chartDefaultOptions.scales.y.ticks, callback: (value) => `${value.toFixed(0)}%` } } },
+                        plugins: { ...chartDefaultOptions.plugins, tooltip: { callbacks: { label: (context) => context.parsed.y !== null ? `${context.dataset.label}: ${context.parsed.y.toFixed(2)}%` : 'N/A' } } }
+                    }
+                });
+            };
+
+            const renderResultQualityChart = (data) => {
+                const { labels, datasets } = data;
+                const operationalResult = datasets.operationalResult || [];
+                const nonOperationalResult = datasets.nonOperationalResult || [];
+
+                const ctx = document.getElementById('resultQualityChart').getContext('2d');
+                createChart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: 'Resultado Operacional', data: operationalResult, backgroundColor: 'rgba(59, 130, 246, 0.7)' },
+                            { label: 'Resultado Não Operacional', data: nonOperationalResult, backgroundColor: 'rgba(234, 179, 8, 0.7)' }
+                        ]
+                    },
+                    options: {
+                        ...chartDefaultOptions,
+                        scales: { ...chartDefaultOptions.scales, x: { ...chartDefaultOptions.scales.x, stacked: true }, y: { ...chartDefaultOptions.scales.y, stacked: true, ticks: { ...chartDefaultOptions.scales.y.ticks, callback: (value) => `R$ ${(value / 1000).toLocaleString('pt-BR')}k` } } },
+                        plugins: { ...chartDefaultOptions.plugins, tooltip: { callbacks: { label: (context) => context.parsed.y !== null ? `${context.dataset.label}: ${context.parsed.y.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'})}` : 'N/A' } } }
+                    }
+                });
+            };
+            
+            const renderFixedCostsCompositionChart = (datasets) => {
+                const sum = (arr) => arr ? arr.reduce((a, b) => (a || 0) + (b || 0), 0) : 0;
+                
+                const personnelCosts = sum(datasets.personnelCosts);
+                const occupationCosts = sum(datasets.occupationCosts);
+                const servicesCosts = sum(datasets.servicesCosts);
+
+                const ctx = document.getElementById('fixedCostsCompositionChart').getContext('2d');
+                createChart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Pessoal', 'Ocupação', 'Serviços de Terceiros'],
+                        datasets: [{
+                            data: [personnelCosts, occupationCosts, servicesCosts],
+                            backgroundColor: ['#3b82f6', '#8b5cf6', '#ec4899'],
+                            borderColor: '#1f2937',
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'top', labels: { color: '#d1d5db' } },
+                            datalabels: { display: false }
+                        }
+                    }
+                });
+            };
+
+
+            const renderVerticalAnalysisChart = (data) => {
+                const { labels, datasets } = data;
+                const netRevenue = datasets.netRevenue || [];
+                const variableCosts = datasets.variableCosts || [];
+                const fixedCosts = datasets.fixedCosts || [];
+                const netProfit = datasets.netProfit || [];
+
+                const variableCostsPerc = netRevenue.map((rev, i) => rev > 0 ? (variableCosts[i] / rev) * 100 : null);
+                const fixedCostsPerc = netRevenue.map((rev, i) => rev > 0 ? (fixedCosts[i] / rev) * 100 : null);
+                const netProfitPerc = netRevenue.map((rev, i) => rev > 0 ? (netProfit[i] / rev) * 100 : null);
+
+                const ctx = document.getElementById('verticalAnalysisChart').getContext('2d');
+                createChart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: 'Custos Variáveis (%)', data: variableCostsPerc, backgroundColor: 'rgba(239, 68, 68, 0.7)' },
+                            { label: 'Custos Fixos (%)', data: fixedCostsPerc, backgroundColor: 'rgba(249, 115, 22, 0.7)' },
+                            { label: 'Lucro Líquido (%)', data: netProfitPerc, backgroundColor: 'rgba(34, 197, 94, 0.7)' }
+                        ]
+                    },
+                    options: {
+                        ...chartDefaultOptions,
+                        scales: { ...chartDefaultOptions.scales, x: { ...chartDefaultOptions.scales.x, stacked: true }, y: { ...chartDefaultOptions.scales.y, stacked: true, ticks: { ...chartDefaultOptions.scales.y.ticks, callback: (value) => `${value.toFixed(0)}%` } } },
+                        plugins: { ...chartDefaultOptions.plugins, tooltip: { callbacks: { label: (context) => context.parsed.y !== null ? `${context.dataset.label}: ${context.parsed.y.toFixed(2)}%` : 'N/A' } } }
+                    }
+                });
+            };
+
+            const renderHorizontalAnalysisChart = (data) => {
+                const { labels, datasets } = data;
+                const netRevenue = datasets.netRevenue || [];
+                const netProfit = datasets.netProfit || [];
+
+                const revenueChange = [null];
+                for (let i = 1; i < netRevenue.length; i++) {
+                    const change = (netRevenue[i-1] !== null && netRevenue[i-1] !== 0) ? ((netRevenue[i] - netRevenue[i-1]) / netRevenue[i-1]) * 100 : null;
+                    revenueChange.push(change);
+                }
+
+                const profitChange = [null];
+                for (let i = 1; i < netProfit.length; i++) {
+                    const change = (netProfit[i-1] !== null && netProfit[i-1] !== 0) ? ((netProfit[i] - netProfit[i-1]) / Math.abs(netProfit[i-1])) * 100 : null;
+                    profitChange.push(change);
+                }
+                
+                const ctx = document.getElementById('horizontalAnalysisChart').getContext('2d');
+                createChart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [
+                            { label: 'Variação Receita Líquida (%)', data: revenueChange, borderColor: '#3b82f6', backgroundColor: 'transparent', tension: 0.1, spanGaps: true },
+                            { label: 'Variação Lucro Líquido (%)', data: profitChange, borderColor: '#22c55e', backgroundColor: 'transparent', tension: 0.1, spanGaps: true }
+                        ]
+                    },
+                    options: {
+                        ...chartDefaultOptions,
+                        scales: { ...chartDefaultOptions.scales, y: { ...chartDefaultOptions.scales.y, beginAtZero: false, ticks: { ...chartDefaultOptions.scales.y.ticks, callback: (value) => `${value.toFixed(0)}%` } } },
+                        plugins: { ...chartDefaultOptions.plugins, tooltip: { callbacks: { label: (context) => context.parsed.y !== null ? `${context.dataset.label}: ${context.parsed.y.toFixed(2)}%` : 'N/A' } } }
+                    }
+                });
+            };
+            
+            const renderCostsCompositionChart = (datasets) => {
+                const ctx = document.getElementById('costsCompositionChart').getContext('2d');
+                const sum = (arr) => arr ? arr.reduce((a, b) => (a || 0) + (b || 0), 0) : 0;
+                const totalRawMaterial = sum(datasets.rawMaterial);
+                const totalVariable = sum(datasets.variableCosts);
+                const otherVariable = totalVariable > totalRawMaterial ? totalVariable - totalRawMaterial : 0;
+
+                createChart(ctx, { 
+                    type: 'doughnut', 
+                    data: { 
+                        labels: ['Matéria Prima', 'Outros Custos Variáveis'], 
+                        datasets: [{ 
+                            data: [totalRawMaterial, otherVariable], 
+                            backgroundColor: ['#ef4444', '#eab308'], 
+                            borderColor: '#1f2937', 
+                            borderWidth: 2 
+                        }] 
+                    }, 
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false, 
+                        plugins: { 
+                            legend: { position: 'top', labels: { color: '#d1d5db' } },
+                            datalabels: { display: false }
+                        } 
+                    } 
+                });
+            };
+            
+            const renderPricingResultsTable = (results, labels, dreData) => {
+                const resultsBody = document.getElementById('results-body');
+                resultsBody.innerHTML = '';
+                const formatCurrency = (value) => value !== null && !isNaN(value) ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'N/A';
+                const formatKg = (value) => value !== null && !isNaN(value) ? `${value.toFixed(2)} kg` : 'N/A';
+                
+                results.forEach((result, i) => {
+                    const row = document.createElement('tr');
+                    if (result && result.pe_rs !== null) {
+                        const revenueReal = dreData.datasets.netRevenue[i];
+                        const revenueSimulado = result.receitaMixTotal;
+                        const difference = revenueSimulado - revenueReal;
+                        const diffColor = difference >= 0 ? 'text-green-400' : 'text-red-400';
+
+                        row.innerHTML = `
+                            <td class="p-4 font-semibold">${labels[i]}</td>
+                            <td class="p-4 text-right">${formatCurrency(revenueReal)}</td>
+                            <td class="p-4 text-right">${formatCurrency(revenueSimulado)}</td>
+                            <td class="p-4 text-right font-semibold ${diffColor}">${formatCurrency(difference)}</td>
+                            <td class="p-4 text-right">${formatCurrency(result.pe_rs)}</td>
+                            <td class="p-4 text-right">${formatKg(result.pe_kg)}</td>
+                        `;
+                    } else {
+                        row.innerHTML = `<td class="p-4 font-semibold">${labels[i]}</td><td class="p-4 text-center text-gray-500" colspan="5">Dados insuficientes para cálculo</td>`;
+                    }
+                    resultsBody.appendChild(row);
+                });
+            };
+
+            const renderBreakEvenProjection = (data) => {
+                const { labels, datasets } = data;
+                const netRevenue = datasets.netRevenue;
+                const contributionMargin = datasets.contributionMargin;
+                const fixedCosts = datasets.fixedCosts;
+
+                const breakEvenPoints = netRevenue.map((rev, i) => {
+                    const mcPercent = rev > 0 ? contributionMargin[i] / rev : 0;
+                    return mcPercent > 0 ? fixedCosts[i] / mcPercent : null;
+                });
+
+                const validFixedCosts = fixedCosts.filter(fc => fc !== null);
+                const validMcPercents = netRevenue.map((rev, i) => rev > 0 ? contributionMargin[i] / rev : null).filter(mc => mc !== null && mc > 0);
+                
+                const avgFixedCosts = validFixedCosts.reduce((a, b) => a + b, 0) / validFixedCosts.length;
+                const avgMcPercent = validMcPercents.reduce((a, b) => a + b, 0) / validMcPercents.length;
+                const projectedPE = avgMcPercent > 0 ? avgFixedCosts / avgMcPercent : 0;
+
+                const lastMonthIndex = fullExtractedData.labels.indexOf(labels[labels.length - 1]);
+                const projectionLabels = [];
+                for (let i = 1; i <= 6; i++) {
+                    projectionLabels.push(fullExtractedData.labels[(lastMonthIndex + i) % 12].substring(0, 3));
+                }
+
+                const allLabels = [...labels, ...projectionLabels];
+                const projectedPEData = new Array(labels.length).fill(null).concat(new Array(6).fill(projectedPE));
+
+                const ctx = document.getElementById('breakEvenProjectionChart').getContext('2d');
+                createChart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: allLabels,
+                        datasets: [
+                            { label: 'Receita Real (DRE)', data: netRevenue, backgroundColor: 'rgba(59, 130, 246, 0.7)' },
+                            { label: 'Ponto de Equilíbrio (DRE)', data: breakEvenPoints, borderColor: '#ef4444', backgroundColor: 'transparent', borderWidth: 2, type: 'line', spanGaps: true, pointRadius: 3 },
+                            { label: 'Meta de PE Projetada', data: projectedPEData, borderColor: '#f59e0b', backgroundColor: 'transparent', borderWidth: 2, borderDash: [5, 5], type: 'line', spanGaps: true, pointRadius: 3 }
+                        ]
+                    },
+                    options: { ...chartDefaultOptions, plugins: { ...chartDefaultOptions.plugins, tooltip: { callbacks: { label: (context) => context.parsed.y !== null ? `R$ ${context.parsed.y.toLocaleString('pt-BR', {minimumFractionDigits: 2})}` : 'N/A' } } }, scales: { ...chartDefaultOptions.scales, y: { ...chartDefaultOptions.scales.y, ticks: { ...chartDefaultOptions.scales.y.ticks, callback: (value) => `R$ ${(value / 1000).toLocaleString('pt-BR')}k` } } } }
+                });
+
+                const tableBody = document.getElementById('breakEvenProjectionTable');
+                tableBody.innerHTML = '';
+                const formatCurrency = (value) => value !== null && !isNaN(value) ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'N/A';
+                const formatPerc = (value) => value !== null && !isNaN(value) ? `${(value * 100).toFixed(2)}%` : 'N/A';
+
+                labels.forEach((label, i) => {
+                    const mcPercent = netRevenue[i] > 0 ? contributionMargin[i] / netRevenue[i] : null;
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="p-3 font-semibold">${label}</td>
+                        <td class="p-3 text-right">${formatCurrency(contributionMargin[i])}</td>
+                        <td class="p-3 text-right">${formatPerc(mcPercent)}</td>
+                        <td class="p-3 text-right">${formatCurrency(breakEvenPoints[i])}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            };
+
+            const addMaterialRow = (name = '', percentage = '', sellPrice = '') => {
+                const row = document.createElement('tr');
+                row.className = "material-row";
+                row.innerHTML = `
+                    <td class="p-2"><input type="text" value="${name}" class="material-name w-full bg-gray-700 border border-gray-600 rounded p-1" placeholder="Nome do Material"></td>
+                    <td class="p-2"><input type="number" value="${percentage}" class="material-percentage w-full bg-gray-700 border border-gray-600 rounded p-1" placeholder="%" required></td>
+                    <td class="p-2"><input type="text" value="${sellPrice}" class="material-sell-price w-full bg-gray-700 border border-gray-600 rounded p-1" placeholder="R$/KG" required></td>
+                    <td class="p-2 text-center"><button class="remove-material-btn text-red-500 font-bold text-xl">&times;</button></td>
+                `;
+                row.querySelector('.remove-material-btn').addEventListener('click', () => {
+                    row.remove();
+                    updateMixWarning();
+                });
+                 row.querySelectorAll('input').forEach(input => input.addEventListener('input', updateMixWarning));
+                materialsBody.appendChild(row);
+                updateMixWarning();
+            };
+
+            const populateDefaultMaterials = () => {
+                materialsBody.innerHTML = '';
+                const defaultMaterials = [
+                    { name: 'LINGOTE', percentage: 68.00, sellPrice: '22.00' },
+                    { name: 'METAL', percentage: 4.00, sellPrice: '32.00' },
+                    { name: 'FERRO', percentage: 10.00, sellPrice: '1.10' },
+                    { name: 'TERRA', percentage: 10.00, sellPrice: '3.00' },
+                    { name: 'CHUMBO', percentage: 0.00, sellPrice: '0.00' },
+                    { name: 'ALUM/BLOCO', percentage: 5.00, sellPrice: '7.10' },
+                    { name: 'GG', percentage: 3.00, sellPrice: '13.50' },
+                    { name: 'PERDA', percentage: 0.00, sellPrice: '0.00' },
+                ];
+                defaultMaterials.forEach(material => {
+                    addMaterialRow(material.name, material.percentage, material.sellPrice);
+                });
+            };
+            
+            const populateMonthFilter = (labels) => {
+                monthFilterContainer.innerHTML = '';
+                labels.forEach((label, index) => {
+                    const monthId = `month-${index}`;
+                    const div = document.createElement('div');
+                    div.innerHTML = `
+                        <input type="checkbox" id="${monthId}" value="${label}" class="hidden month-checkbox" checked>
+                        <label for="${monthId}" class="cursor-pointer w-full text-center text-sm p-2 block border border-gray-600 rounded-lg bg-gray-700 text-gray-300 transition-colors duration-200">${label.substring(0,3)}</label>
+                    `;
+                    monthFilterContainer.appendChild(div);
+                });
+                monthFilterSection.classList.remove('hidden');
+            };
+            
+            const updateMixWarning = () => {
+                const materialRows = materialsBody.querySelectorAll('tr');
+                let totalPercentage = 0;
+                materialRows.forEach(row => {
+                    totalPercentage += parseFloat(row.querySelector('.material-percentage').value) || 0;
+                });
+                
+                if (Math.abs(totalPercentage - 100) > 0.01 && totalPercentage > 0) {
+                    mixWarningDiv.textContent = `A soma das porcentagens é ${totalPercentage.toFixed(2)}%, diferente de 100%. As estimativas podem estar distorcidas.`;
+                    mixWarningDiv.classList.remove('hidden');
+                } else {
+                    mixWarningDiv.classList.add('hidden');
+                }
+            };
+            
+            normalizeBtn.addEventListener('click', () => {
+                const materialRows = materialsBody.querySelectorAll('tr');
+                let totalPercentage = 0;
+                materialRows.forEach(row => {
+                    totalPercentage += parseFloat(row.querySelector('.material-percentage').value) || 0;
+                });
+
+                if (totalPercentage > 0) {
+                    materialRows.forEach(row => {
+                        const input = row.querySelector('.material-percentage');
+                        const currentValue = parseFloat(input.value) || 0;
+                        input.value = ((currentValue / totalPercentage) * 100).toFixed(2);
+                    });
+                }
+                updateMixWarning();
+            });
+
+            formatPricesBtn.addEventListener('click', () => {
+                const materialRows = materialsBody.querySelectorAll('tr');
+                materialRows.forEach(row => {
+                    const priceInput = row.querySelector('.material-sell-price');
+                    let value = priceInput.value;
+
+                    if (value.trim() === '') {
+                        return; 
+                    }
+                    
+                    const cleanedValue = value.replace(/R\$\s*/g, '').trim().replace(',', '.');
+                    const numericValue = parseFloat(cleanedValue);
+
+                    if (!isNaN(numericValue)) {
+                        priceInput.value = numericValue.toFixed(2);
+                    }
+                });
+            });
+            
+            fixedCostModeSelect.addEventListener('change', () => {
+                fixedCostManualInput.classList.toggle('hidden', fixedCostModeSelect.value === 'dre');
+                if(fixedCostModeSelect.value === 'manual') {
+                    fixedCostManualInput.required = true;
+                } else {
+                    fixedCostManualInput.required = false;
+                }
+            });
+
+            fileInput.addEventListener('change', async () => {
+                const file = fileInput.files[0];
+                if (!file) return;
+
+                loader.classList.remove('hidden');
+                loaderText.textContent = 'Lendo PDF e extraindo meses...';
+                errorMessageDiv.classList.add('hidden');
+                resultsContainer.classList.add('hidden');
+                monthFilterSection.classList.add('hidden');
+                analyzeButton.disabled = true;
+
+                const fileReader = new FileReader();
+                fileReader.onload = async function() {
+                    try {
+                        const typedarray = new Uint8Array(this.result);
+                        fullPdfText = await extractPdfText(typedarray);
+                        const apiKey = apiKeyInput.value;
+                        if (!apiKey) {
+                            showError('Por favor, insira a sua chave da API do Gemini antes de carregar o PDF.');
+                            return;
+                        }
+                        fullExtractedData = await getStructuredDataFromAI(fullPdfText, apiKey);
+                        
+                        if (!fullExtractedData.labels || fullExtractedData.labels.length === 0) {
+                            throw new Error("A IA não conseguiu extrair os meses do PDF.");
+                        }
+
+                        populateMonthFilter(fullExtractedData.labels);
+                        analyzeButton.disabled = false;
+                        loader.classList.add('hidden');
+                    } catch (e) {
+                        showError(e.message);
+                    }
+                };
+                fileReader.readAsArrayBuffer(file);
+            });
+
+            analyzeButton.addEventListener('click', handleAnalysis);
+            addMaterialBtn.addEventListener('click', () => addMaterialRow('Novo Material', '', ''));
+            
+            // Iniciar com alguns materiais
+            populateDefaultMaterials();
+        });
+    </script>
+</body>
+</html>
